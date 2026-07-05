@@ -459,10 +459,10 @@ const DATA = {
     ["מנחה גדולה","13:18"],["שקיעה","19:52"],["צאת הכוכבים","20:14"]
   ],
   minyanim:[
-    {name:"מרכזי", tag:"בית הכנסת המרכזי",
-      night:[["מנחה וקבלת שבת","18:00"],["מנחה וקבלת שבת","19:35"]],
-      morning:[["שחרית","6:00 · 8:00"]],
-      after:[["מנחה גדולה","13:30"],["מנחה א׳","13:30"],["לימוד סניפי","16:35"],["מנחה סניף","16:55"],["אבות ובנים","17:15"],["מנחה ב׳","18:00","שיעור לאחר מנחה"],["ערבית","20:22"],["ערבית","20:39"]]},
+    {name:"מרכזי", tag:"אשכנזי · כולל שרגא דן וכנפי יונה",
+      night:[["מנחה וקבלת שבת","18:00"],["מנחה וקבלת שבת","19:35"],["מנחה וקבלת שבת","19:35","(שרגא דן)"],["מנחה וקבלת שבת","19:35","(כנפי יונה)"]],
+      morning:[["שחרית","6:00 · 8:00"],["שחרית ותיקין","05:02","(שרגא דן)"],["שחרית","09:00","(כנפי יונה) · אולם שמחות"]],
+      after:[["מנחה גדולה","13:30"],["מנחה א׳","13:30"],["לימוד סניפי","16:35"],["מנחה סניף","16:55"],["אבות ובנים","17:15"],["מנחה ב׳","18:00","שיעור לאחר מנחה"],["מנחה ב׳","19:22","(שרגא דן)"],["ערבית","20:22"],["ערבית","20:39"],["ערבית","20:32","(שרגא דן)"],["ערבית ר״ת","21:04","(שרגא דן)"]]},
     {name:"רבת״כ ניצנים", tag:"ספרדי",
       night:[["שיר השירים","19:40"]],
       morning:[["שחרית · קרבנות","07:45"]],
@@ -486,15 +486,7 @@ const DATA = {
     {name:"רב תכליתי", tag:"אולם רב־תכליתי",
       night:[["מנחה וקבלת שבת","18:00"],["מנחה וקבלת שבת","19:30"]],
       morning:[["שחרית","08:15"],["תפילת ילדים","10:00"],["תהילים לילדים · מאור הלבנה","12:30"]],
-      after:[["מנחה א׳","13:30"],["אבות ובנים","17:20"],["מנחה ב׳","18:00"],["ערבית","20:32"]]},
-    {name:"שרגא דן", tag:"",
-      night:[["מנחה וקבלת שבת","19:35"]],
-      morning:[["שחרית ותיקין","05:02"]],
-      after:[["מנחה ב׳","19:22"],["ערבית","20:32"],["ערבית ר״ת","21:04"]]},
-    {name:"פרגולת כנפי יונה", tag:"",
-      night:[["מנחה וקבלת שבת","19:35"]],
-      morning:[["שחרית · אולם שמחות","09:00"]],
-      after:[]}
+      after:[["מנחה א׳","13:30"],["אבות ובנים","17:20"],["מנחה ב׳","18:00"],["ערבית","20:32"]]}
   ],
   weekday:{
     cols:["מרכזי","שרגא דן","אוהל שרה","משכן דוד","שבת אחים","ניצנים"],
@@ -709,12 +701,19 @@ document.querySelectorAll('.vt').forEach(btn=>btn.addEventListener('click',()=>{
 // weekday — two collapsible views (by synagogue / by prayer), closed by default
 (function(){
   const w=DATA.weekday;
+  // בימות החול "מרכזי" (אשכנזי) כולל גם שרגא דן וגם אוהל שרה — עם המיקום בסוגריים
+  const MERGE={"שרגא דן":"שרגא דן","אוהל שרה":"אוהל שרה"};
+  const shulOf=n=>(n==="מרכזי"||n in MERGE)?"מרכזי":n;
+  const locOf=n=>(n in MERGE)?('('+MERGE[n]+')'):"";
   // --- by synagogue ---
-  const per=w.cols.map((name,ci)=>{
-    const items=[];
-    w.rows.forEach(([lbl,vals])=>{ const v=vals[ci]; if(!v) return; const [main,note]=v.split('|'); items.push([lbl,main,note]); });
-    return {name,items};
-  }).filter(s=>s.items.length);
+  const order=[], map={};
+  w.cols.forEach((name,ci)=>{
+    const key=shulOf(name), loc=locOf(name);
+    if(!map[key]){map[key]=[];order.push(key);}
+    w.rows.forEach(([lbl,vals])=>{ const v=vals[ci]; if(!v) return; const [main,note]=v.split('|');
+      map[key].push([lbl,main,[loc,note].filter(Boolean).join(' · ')]); });
+  });
+  const per=order.map(name=>({name,items:map[name].slice().sort((a,b)=>timeKey(a[1])-timeKey(b[1]))})).filter(s=>s.items.length);
   document.getElementById('wk-shul').innerHTML=per.map(s=>{
     const rows=`<div class="rows">${s.items.map(([l,t,note])=>
       `<div class="trow"><div class="rl">${l}${note?`<em>${note}</em>`:''}</div><div class="rt">${fmtTime(t)}</div></div>`).join('')}</div>`;
@@ -730,12 +729,13 @@ document.querySelectorAll('.vt').forEach(btn=>btn.addEventListener('click',()=>{
   w.rows.forEach(([lbl,vals])=>vals.forEach((v,ci)=>{
     if(!v) return; const [main,note]=v.split('|');
     const idx=WKCATS.findIndex(c=>c.test(lbl)); if(idx<0) return;
-    wb[idx].push({shul:w.cols[ci],label:lbl,time:main,note});
+    const name=w.cols[ci];
+    wb[idx].push({shul:shulOf(name),em:[lbl,locOf(name),note].filter(Boolean).join(' · '),time:main});
   }));
   document.getElementById('wk-tefila').innerHTML=WKCATS.map((c,i)=>{
     if(!wb[i].length) return '';
     const list=wb[i].slice().sort((a,b)=>timeKey(a.time)-timeKey(b.time));
-    const rows=list.map(r=>`<div class="prow"><div class="pl">${r.shul}<em>${r.label}${r.note?' · '+r.note:''}</em></div><div class="pt">${fmtTime(r.time)}</div></div>`).join('');
+    const rows=list.map(r=>`<div class="prow"><div class="pl">${r.shul}<em>${r.em}</em></div><div class="pt">${fmtTime(r.time)}</div></div>`).join('');
     return `<details class="acc"><summary>${c.icon}<span class="acc-title">${c.title}</span><span class="acc-hint">${list.length}</span>${CHEV}</summary><div class="acc-body"><div class="rows">${rows}</div></div></details>`;
   }).join('');
   // toggle
